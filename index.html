@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLH - Báo Cáo Tranh Mỏ</title>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background:#f5f5f5;
+    max-width:1200px;
+    margin:auto;
+    padding:20px;
+}
+
+h1{
+    text-align:center;
+    color:#c0392b;
+}
+
+.admin-bar{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+.form-box{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    margin-bottom:20px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+.ticket-list{
+    display:flex;
+    flex-direction:column;
+    gap:15px;
+}
+
+.ticket{
+    background:white;
+    padding:15px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+.ticket img{
+    max-width:300px;
+    margin-top:10px;
+    border-radius:8px;
+}
+
+input,textarea{
+    width:100%;
+    padding:10px;
+    margin-top:5px;
+    margin-bottom:15px;
+    box-sizing:border-box;
+}
+
+button{
+    padding:10px 15px;
+    cursor:pointer;
+    border:none;
+    border-radius:6px;
+}
+
+.btn-submit{
+    background:#27ae60;
+    color:white;
+}
+
+.btn-resolve{
+    background:#2980b9;
+    color:white;
+    margin-right:5px;
+}
+
+.btn-delete{
+    background:#c0392b;
+    color:white;
+}
+
+.status-open{
+    color:#f39c12;
+    font-weight:bold;
+}
+
+.status-resolved{
+    color:#27ae60;
+    font-weight:bold;
+}
+
+.note{
+    text-align:center;
+    color:#555;
+    margin-bottom:20px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>HỆ THỐNG BÁO CÁO TRANH MỎ TLH</h1>
+
+<div class="note">
+Chỉ sử dụng để báo cáo các trường hợp tranh mỏ trong bang.
+</div>
+
+<div class="admin-bar">
+    <button onclick="loginAdmin()">Đăng nhập Admin</button>
+    <span id="adminStatus"></span>
+</div>
+
+<div class="form-box">
+
+    <h2>Gửi Ticket</h2>
+
+    <label>Người gửi</label>
+    <input type="text" id="reporter">
+
+    <label>Người vi phạm</label>
+    <input type="text" id="offender">
+
+    <label>Mô tả sự việc</label>
+    <textarea id="description" rows="4"></textarea>
+
+    <label>Ảnh chứng cứ</label>
+    <input type="file" id="evidence" accept="image/*">
+
+    <button class="btn-submit" onclick="submitTicket()">
+        Gửi Ticket
+    </button>
+
+</div>
+
+<h2>Danh sách Ticket</h2>
+
+<div id="ticketList" class="ticket-list"></div>
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import {
+    getDatabase,
+    ref,
+    push,
+    set,
+    get,
+    onValue
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDD84uSFhFXyC95iKAXQM9gyuQKubH9qT0",
+    authDomain: "tlhtranhmo.firebaseapp.com",
+    databaseURL: "https://tlhtranhmo-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tlhtranhmo",
+    storageBucket: "tlhtranhmo.firebasestorage.app",
+    messagingSenderId: "785427341230",
+    appId: "1:785427341230:web:7a8da5949410881103323f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const IMGBB_KEY = "af65e34e5a57167422f4072938b3b8e6";
+
+let isAdmin = false;
+
+window.loginAdmin = function(){
+
+    const pass = prompt("Nhập mật khẩu Admin");
+
+    if(pass === "TW2026"){
+        isAdmin = true;
+        document.getElementById("adminStatus").innerHTML =
+            " ✅ Đã đăng nhập Admin";
+        renderTickets(lastTickets);
+    }else{
+        alert("Sai mật khẩu");
+    }
+}
+
+async function uploadToImgBB(file){
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch(
+        `https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,
+        {
+            method:"POST",
+            body:formData
+        }
+    );
+
+    const result = await response.json();
+
+    return result.data.url;
+}
+
+window.submitTicket = async function(){
+
+    const reporter =
+        document.getElementById("reporter")
+        .value.trim();
+
+    const offender =
+        document.getElementById("offender")
+        .value.trim();
+
+    const description =
+        document.getElementById("description")
+        .value.trim();
+
+    const file =
+        document.getElementById("evidence")
+        .files[0];
+
+    if(!reporter || !offender || !description){
+        alert("Vui lòng nhập đầy đủ thông tin");
+        return;
+    }
+
+    let imageUrl = "";
+
+    if(file){
+        imageUrl = await uploadToImgBB(file);
+    }
+
+    await push(ref(db,"tickets"),{
+        reporter,
+        offender,
+        description,
+        imageUrl,
+        status:"open",
+        createdAt:Date.now()
+    });
+
+    document.getElementById("reporter").value="";
+    document.getElementById("offender").value="";
+    document.getElementById("description").value="";
+    document.getElementById("evidence").value="";
+
+    alert("Đã gửi ticket");
+}
+
+window.resolveTicket = async function(id){
+
+    if(!isAdmin){
+        alert("Chỉ Admin mới được thao tác");
+        return;
+    }
+
+    await set(
+        ref(db,"tickets/"+id+"/status"),
+        "resolved"
+    );
+}
+
+window.deleteTicket = async function(id){
+
+    if(!isAdmin){
+        alert("Chỉ Admin mới được thao tác");
+        return;
+    }
+
+    if(!confirm("Ẩn ticket này?")){
+        return;
+    }
+
+    await set(
+        ref(db,"tickets/"+id+"/status"),
+        "deleted"
+    );
+}
+
+let lastTickets = [];
+
+function renderTickets(tickets){
+
+    const container =
+        document.getElementById("ticketList");
+
+    let html = "";
+
+    tickets.forEach(ticket=>{
+
+        if(ticket.status === "deleted"){
+            return;
+        }
+
+        const statusText =
+            ticket.status === "resolved"
+            ? '<span class="status-resolved">🟢 Đã xử lý</span>'
+            : '<span class="status-open">🟡 Chưa xử lý</span>';
+
+        html += `
+        <div class="ticket">
+
+            <div>
+                <b>Người gửi:</b>
+                ${ticket.reporter}
+            </div>
+
+            <div>
+                <b>Người vi phạm:</b>
+                ${ticket.offender}
+            </div>
+
+            <div style="margin-top:8px;">
+                <b>Nội dung:</b><br>
+                ${ticket.description}
+            </div>
+
+            <div style="margin-top:8px;">
+                ${statusText}
+            </div>
+
+            ${
+                ticket.imageUrl
+                ? `
+                <div style="margin-top:10px;">
+                    <a href="${ticket.imageUrl}"
+                       target="_blank">
+                       Xem ảnh chứng cứ
+                    </a>
+                </div>
+                `
+                : ""
+            }
+
+            ${
+                isAdmin
+                ? `
+                <div style="margin-top:12px;">
+                    <button
+                        class="btn-resolve"
+                        onclick="resolveTicket('${ticket.id}')">
+                        Đã xử lý
+                    </button>
+
+                    <button
+                        class="btn-delete"
+                        onclick="deleteTicket('${ticket.id}')">
+                        Xóa
+                    </button>
+                </div>
+                `
+                : ""
+            }
+
+        </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+onValue(ref(db,"tickets"),(snapshot)=>{
+
+    let tickets = [];
+
+    snapshot.forEach(child=>{
+
+        tickets.push({
+            id:child.key,
+            ...child.val()
+        });
+
+    });
+
+    tickets.sort(
+        (a,b)=>
+        (b.createdAt||0) -
+        (a.createdAt||0)
+    );
+
+    lastTickets = tickets;
+
+    renderTickets(tickets);
+});
+
+</script>
+
+</body>
+</html>
+
